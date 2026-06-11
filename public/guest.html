@@ -1,36 +1,40 @@
-<!-- <!DOCTYPE html>
-
-
- <!DOCTYPE html>
- <!DOCTYPE html>
- <!DOCTYPE html>
-<html>
-<head>
-  <title>AmpMe MVP – Guest</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div class="container">
-    <h1>🔊 Joined Session</h1>
-    <div id="status">Waiting for host...</div>
-    <div class="offset-control">
-      <label>Manual sync offset:</label>
-      <div id="offsetSlider"></div> populated by client.js 
-    </div>
-  </div>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js"></script>
-</body>
-</html>-->
-
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <title>MusicBand – Guest</title>
     <link rel="stylesheet" href="style.css" />
+    <style>
+      #clickOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: #0009;
+        z-index: 100;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 1rem;
+        font-size: 1.2rem;
+        color: #fff;
+        text-align: center;
+        cursor: pointer;
+      }
+      #clickOverlay.visible {
+        display: flex;
+      }
+      #clickOverlay span {
+        font-size: 2.5rem;
+      }
+    </style>
   </head>
   <body>
+    <!-- FIX #5: autoplay overlay -->
+    <div id="clickOverlay">
+      <span>🔊</span>
+      <p>⚠️ Click anywhere to enable audio</p>
+    </div>
+
     <div class="container">
       <h1>🔊 Joined Session</h1>
       <div class="status" id="status">Waiting for host...</div>
@@ -56,52 +60,114 @@
       const status = document.getElementById("status");
       const offsetSlider = document.getElementById("offsetSlider");
       const offsetValue = document.getElementById("offsetValue");
+      const clickOverlay = document.getElementById("clickOverlay");
 
       const urlParams = new URLSearchParams(window.location.search);
       const roomId = urlParams.get("room");
-      let manualOffset = 0; // ms
+      let manualOffset = 0;
+      let pendingState = null; // FIX #5: store state if blocked
+      let audioReady = false; // FIX #4: track canplaythrough
+      let rateResetTimer = null; // FIX #3: playback rate smoothing
 
       offsetSlider.addEventListener("input", (e) => {
         manualOffset = parseInt(e.target.value);
         offsetValue.textContent = manualOffset + "ms";
       });
 
-      socket.emit("join-room", roomId, ({ success, error }) => {
-        if (!success) {
-          status.textContent = "Room not found.";
-          alert("Room not found: " + error);
+      // FIX #5: on overlay click, enable audio and apply pending state
+      clickOverlay.addEventListener("click", () => {
+        clickOverlay.classList.remove("visible");
+        if (pendingState) {
+          applySync(pendingState);
+          pendingState = null;
         }
       });
 
-      socket.on("sync-state", (state) => {
-        // FIX Bug 4: load audio if src changed
-        if (state.audioUrl && audio.src !== state.audioUrl) {
-          audio.src = state.audioUrl;
+      // FIX #4: preload audio, wait for canplaythrough before seeking/playing
+      async function loadAudio(url) {
+        if (audio.src === url && audioReady) return; // already loaded
+        audioReady = false;
+        audio.src = url;
+        audio.preload = "auto";
+        await new Promise((resolve) => {
+          audio.addEventListener("canplaythrough", resolve, { once: true });
           audio.load();
-        }
+        });
+        audioReady = true;
+      }
 
-        // FIX Bug 2: use serverTimestamp for latency compensation, not lastSyncTime=0
+      // FIX #3: playback rate smoothing for small drift, hard seek for large
+      function applySmoothSync(targetTime) {
+        const diff = targetTime - audio.currentTime; // seconds
+        if (Math.abs(diff) < 0.05) return; // <50ms: fine, do nothing
+
+        if (Math.abs(diff) > 0.5) {
+          // Large drift: hard seek
+          audio.currentTime = Math.max(0, targetTime);
+          audio.playbackRate = 1.0;
+          clearTimeout(rateResetTimer);
+        } else {
+          // Small drift: nudge rate
+          audio.playbackRate = diff > 0 ? 1.02 : 0.98;
+          clearTimeout(rateResetTimer);
+          rateResetTimer = setTimeout(() => {
+            audio.playbackRate = 1.0;
+          }, 2000);
+        }
+      }
+
+      async function applySync(state) {
+        // FIX #4: ensure audio loaded before doing anything
+        await loadAudio(state.audioUrl);
+
         const networkLatency = (Date.now() - state.serverTimestamp) / 1000;
         const targetTime =
           state.currentTime + networkLatency + manualOffset / 1000;
 
         if (state.isPlaying) {
-          // Only seek if drift > 200ms
-          if (Math.abs(audio.currentTime - targetTime) > 0.2) {
-            audio.currentTime = Math.max(0, targetTime);
+          applySmoothSync(targetTime); // FIX #3
+          try {
+            await audio.play();
+            status.textContent = "▶ Playing";
+          } catch (e) {
+            // FIX #5: autoplay blocked — show overlay, save state
+            pendingState = state;
+            clickOverlay.classList.add("visible");
+            status.textContent = "⚠️ Click to enable audio";
           }
-          audio.play().catch((e) => console.warn("Autoplay blocked:", e));
-          status.textContent = "▶ Playing";
         } else {
           audio.pause();
           audio.currentTime = Math.max(0, state.currentTime);
+          audio.playbackRate = 1.0;
+          clearTimeout(rateResetTimer);
           status.textContent = "⏸ Paused";
         }
+      }
+
+      function joinRoom() {
+        socket.emit("join-room", roomId, ({ success, error }) => {
+          if (!success) {
+            status.textContent = "Room not found.";
+            alert("Room not found: " + error);
+          }
+        });
+      }
+
+      joinRoom();
+
+      socket.on("sync-state", (state) => {
+        applySync(state);
       });
 
       socket.on("host-disconnected", () => {
         audio.pause();
         status.textContent = "Host left. Session ended.";
+      });
+
+      // FIX #8: on reconnect, re-join room so server knows we're back
+      socket.on("reconnect", () => {
+        status.textContent = "Reconnecting...";
+        joinRoom();
       });
     </script>
   </body>
