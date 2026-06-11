@@ -1,0 +1,152 @@
+<!-- <!doctype html>
+<html>
+  <head>
+    <title>AmpMe MVP – Host</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎧 Host a Session</h1>
+      <div>
+        <button id="playPauseBtn">Play</button>
+        <input
+          type="range"
+          id="seekSlider"
+          min="0"
+          max="100"
+          step="0.1"
+          value="0"
+        />
+      </div>
+      <p>Share this link with guests:</p>
+      <code id="inviteLink"></code>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+    <script>
+      // Room ID from URL or generate
+      const room = Math.random().toString(36).substring(2, 8);
+      const inviteUrl = `${window.location.origin}/guest.html?room=${room}&role=guest`;
+      document.getElementById("inviteLink").innerText = inviteUrl;
+      // Connect client script (which uses same room)
+      window.roomId = room;
+    </script>
+  </body>
+</html> -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MusicBand – Host</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎧 Host a Session</h1>
+      <input
+        id="audioUrl"
+        type="url"
+        placeholder="MP3 URL (e.g. https://...song.mp3)"
+      />
+      <button id="createBtn">Create Room</button>
+
+      <div
+        id="roomSection"
+        style="display: none; flex-direction: column; gap: 1rem"
+      >
+        <p>Share with guests:</p>
+        <code id="inviteLink"></code>
+
+        <div class="controls">
+          <button id="playBtn" disabled>▶ Play</button>
+          <button id="pauseBtn" disabled>⏸ Pause</button>
+        </div>
+        <input
+          type="range"
+          id="seekSlider"
+          min="0"
+          max="100"
+          step="0.1"
+          value="0"
+        />
+        <div class="status" id="status">Waiting for guests...</div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      const audio = new Audio();
+      let roomId = null;
+      let syncInterval = null;
+
+      const createBtn = document.getElementById("createBtn");
+      const roomSection = document.getElementById("roomSection");
+      const inviteLink = document.getElementById("inviteLink");
+      const playBtn = document.getElementById("playBtn");
+      const pauseBtn = document.getElementById("pauseBtn");
+      const seekSlider = document.getElementById("seekSlider");
+      const status = document.getElementById("status");
+
+      function sendSync(isPlaying) {
+        socket.emit("playback-update", roomId, {
+          isPlaying,
+          currentTime: audio.currentTime,
+        });
+      }
+
+      createBtn.addEventListener("click", async () => {
+        const url = document.getElementById("audioUrl").value.trim();
+        if (!url) return alert("Enter an MP3 URL.");
+
+        // FIX Bug 1: server generates roomId — not Math.random() on client
+        const res = await fetch("/create-room-id");
+        const { roomId: id } = await res.json();
+        roomId = id;
+
+        socket.emit("create-room", roomId, url, ({ success, error }) => {
+          if (!success) return alert("Error: " + error);
+
+          audio.src = url;
+          inviteLink.textContent = `${location.origin}/guest.html?room=${roomId}`;
+          roomSection.style.display = "flex";
+          createBtn.disabled = true;
+          playBtn.disabled = false;
+          pauseBtn.disabled = false;
+          status.textContent = "Room live.";
+        });
+      });
+
+      // FIX Bug 3: wire up UI buttons to audio
+      playBtn.addEventListener("click", () => {
+        audio.play();
+        sendSync(true);
+        clearInterval(syncInterval);
+        syncInterval = setInterval(() => {
+          if (!audio.paused) sendSync(true);
+        }, 100);
+        status.textContent = "Playing…";
+      });
+
+      pauseBtn.addEventListener("click", () => {
+        audio.pause();
+        sendSync(false);
+        clearInterval(syncInterval);
+        status.textContent = "Paused.";
+      });
+
+      // Seek slider
+      audio.addEventListener("timeupdate", () => {
+        if (!isNaN(audio.duration)) {
+          seekSlider.value = (audio.currentTime / audio.duration) * 100;
+        }
+      });
+      seekSlider.addEventListener("input", () => {
+        if (!isNaN(audio.duration)) {
+          audio.currentTime = (seekSlider.value / 100) * audio.duration;
+          sendSync(!audio.paused);
+        }
+      });
+    </script>
+  </body>
+</html>

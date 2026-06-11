@@ -1,0 +1,108 @@
+<!-- <!DOCTYPE html>
+
+
+ <!DOCTYPE html>
+ <!DOCTYPE html>
+ <!DOCTYPE html>
+<html>
+<head>
+  <title>AmpMe MVP – Guest</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🔊 Joined Session</h1>
+    <div id="status">Waiting for host...</div>
+    <div class="offset-control">
+      <label>Manual sync offset:</label>
+      <div id="offsetSlider"></div> populated by client.js 
+    </div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>-->
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MusicBand – Guest</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔊 Joined Session</h1>
+      <div class="status" id="status">Waiting for host...</div>
+      <div class="offset-control">
+        <span class="offset-label"
+          >Manual offset: <b id="offsetValue">0ms</b></span
+        >
+        <input
+          type="range"
+          id="offsetSlider"
+          min="-500"
+          max="500"
+          step="10"
+          value="0"
+        />
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      const audio = new Audio();
+      const status = document.getElementById("status");
+      const offsetSlider = document.getElementById("offsetSlider");
+      const offsetValue = document.getElementById("offsetValue");
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomId = urlParams.get("room");
+      let manualOffset = 0; // ms
+
+      offsetSlider.addEventListener("input", (e) => {
+        manualOffset = parseInt(e.target.value);
+        offsetValue.textContent = manualOffset + "ms";
+      });
+
+      socket.emit("join-room", roomId, ({ success, error }) => {
+        if (!success) {
+          status.textContent = "Room not found.";
+          alert("Room not found: " + error);
+        }
+      });
+
+      socket.on("sync-state", (state) => {
+        // FIX Bug 4: load audio if src changed
+        if (state.audioUrl && audio.src !== state.audioUrl) {
+          audio.src = state.audioUrl;
+          audio.load();
+        }
+
+        // FIX Bug 2: use serverTimestamp for latency compensation, not lastSyncTime=0
+        const networkLatency = (Date.now() - state.serverTimestamp) / 1000;
+        const targetTime =
+          state.currentTime + networkLatency + manualOffset / 1000;
+
+        if (state.isPlaying) {
+          // Only seek if drift > 200ms
+          if (Math.abs(audio.currentTime - targetTime) > 0.2) {
+            audio.currentTime = Math.max(0, targetTime);
+          }
+          audio.play().catch((e) => console.warn("Autoplay blocked:", e));
+          status.textContent = "▶ Playing";
+        } else {
+          audio.pause();
+          audio.currentTime = Math.max(0, state.currentTime);
+          status.textContent = "⏸ Paused";
+        }
+      });
+
+      socket.on("host-disconnected", () => {
+        audio.pause();
+        status.textContent = "Host left. Session ended.";
+      });
+    </script>
+  </body>
+</html>
