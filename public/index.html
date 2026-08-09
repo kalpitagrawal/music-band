@@ -2,114 +2,777 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>MusicBand – Host</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MusicBand — Listen Together in Sync</title>
+    <meta name="description" content="MusicBand lets you listen to music in perfect sync with friends. Create a room, share the link, and enjoy together in real-time." />
     <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎧</text></svg>" />
   </head>
   <body>
-    <div class="container">
-      <h1>🎧 Host a Session</h1>
-      <input
-        id="audioUrl"
-        type="url"
-        placeholder="MP3 URL (e.g. https://...song.mp3)"
-      />
-      <button id="createBtn">Create Room</button>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
 
-      <div
-        id="roomSection"
-        style="display: none; flex-direction: column; gap: 1rem"
-      >
-        <p>Share with guests:</p>
-        <code id="inviteLink"></code>
+    <!-- Autoplay Overlay (guests) -->
+    <div class="autoplay-overlay" id="autoplayOverlay">
+      <div class="autoplay-icon">🔊</div>
+      <div class="autoplay-text">
+        <strong>Click anywhere to enable audio</strong>
+        Browser requires a user gesture to play audio
+      </div>
+    </div>
 
-        <div class="controls">
-          <button id="playBtn" disabled>▶ Play</button>
-          <button id="pauseBtn" disabled>⏸ Pause</button>
+    <div id="app">
+      <!-- Landing Page -->
+      <div class="landing" id="landingView">
+        <div class="landing-header">
+          <div class="logo">🎧</div>
+          <h1>MusicBand</h1>
+          <p>Listen to music in perfect sync with friends. Create a room or join one — it's that simple.</p>
         </div>
-        <input
-          type="range"
-          id="seekSlider"
-          min="0"
-          max="100"
-          step="0.1"
-          value="0"
-        />
-        <div class="status" id="status">Waiting for guests...</div>
+
+        <div class="landing-actions">
+          <!-- Host Card -->
+          <div class="card" id="hostCard">
+            <div class="card-title">
+              <div class="icon host">🎵</div>
+              Host a Session
+            </div>
+            <div class="input-group">
+              <label class="input-label" for="audioUrlInput">Audio URL</label>
+              <input
+                class="input"
+                id="audioUrlInput"
+                type="url"
+                placeholder="https://example.com/song.mp3"
+                autocomplete="off"
+              />
+            </div>
+            <button class="btn btn-primary" id="createRoomBtn" style="margin-top: 1rem; width: 100%;">
+              Create Room
+            </button>
+          </div>
+
+          <!-- Join Card -->
+          <div class="card" id="joinCard">
+            <div class="card-title">
+              <div class="icon join">🔗</div>
+              Join a Session
+            </div>
+            <div class="input-group">
+              <label class="input-label" for="roomIdInput">Room ID</label>
+              <input
+                class="input"
+                id="roomIdInput"
+                type="text"
+                placeholder="Paste room ID or invite link"
+                autocomplete="off"
+              />
+            </div>
+            <button class="btn btn-secondary" id="joinRoomBtn" style="margin-top: 1rem; width: 100%;">
+              Join Room
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Room View (hidden by default) -->
+      <div class="room-view" id="roomView" style="display: none;">
+        <!-- Main Column -->
+        <div class="room-main">
+          <!-- Room Header -->
+          <div class="room-header">
+            <div class="room-header-left">
+              <h2>🎧 MusicBand</h2>
+              <span class="room-badge"><span class="dot"></span> LIVE</span>
+              <span class="listener-badge" id="listenerBadge">👥 1</span>
+            </div>
+            <button class="btn btn-sm btn-danger" id="leaveBtn">Leave</button>
+          </div>
+
+          <!-- Player Card -->
+          <div class="card player-card">
+            <!-- Track Info -->
+            <div class="track-info">
+              <div class="track-art" id="trackArt">🎵</div>
+              <div class="track-details">
+                <div class="track-name" id="trackName">No track loaded</div>
+                <div class="track-meta" id="trackMeta">—</div>
+              </div>
+              <span class="status-pill paused" id="statusPill">
+                ⏸ Paused
+              </span>
+            </div>
+
+            <!-- Waveform Visualizer -->
+            <div class="visualizer-container">
+              <canvas id="waveformCanvas"></canvas>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-container">
+              <div class="progress-bar-wrapper" id="progressBar">
+                <div class="progress-bar-fill" id="progressFill" style="width: 0%"></div>
+              </div>
+              <div class="progress-times">
+                <span id="currentTimeDisplay">0:00</span>
+                <span id="durationDisplay">0:00</span>
+              </div>
+            </div>
+
+            <!-- Playback Controls -->
+            <div class="playback-controls">
+              <div class="volume-control" id="volumeControl">
+                <button class="btn-icon" id="volumeBtn">🔊</button>
+                <input
+                  type="range"
+                  class="volume-slider"
+                  id="volumeSlider"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="1"
+                />
+              </div>
+
+              <button class="btn-icon" id="skipBackBtn" title="Rewind 10s">⏪</button>
+              <button class="play-btn-main" id="playPauseBtn">▶</button>
+              <button class="btn-icon" id="skipFwdBtn" title="Forward 10s">⏩</button>
+
+              <!-- Offset control (guest only) -->
+              <div class="volume-control" id="offsetControl" style="display: none;">
+                <span class="offset-label">Offset</span>
+                <input
+                  type="range"
+                  class="volume-slider"
+                  id="offsetSlider"
+                  min="-500"
+                  max="500"
+                  step="10"
+                  value="0"
+                  title="Manual sync offset"
+                />
+                <span class="offset-value" id="offsetValue">0ms</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Invite Section (host only) -->
+          <div class="card invite-section" id="inviteSection" style="display: none;">
+            <div class="card-title" style="margin-bottom: 0.5rem;">
+              <div class="icon host">📋</div>
+              Invite Link
+            </div>
+            <div class="invite-link-box">
+              <code id="inviteLinkText"></code>
+              <button class="copy-btn" id="copyInviteBtn">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat Sidebar -->
+        <div class="card chat-panel">
+          <div class="chat-header">
+            <h3>💬 Chat</h3>
+            <span class="listener-badge" id="chatListenerBadge">👥 1</span>
+          </div>
+          <div class="chat-messages" id="chatMessages">
+            <div class="chat-empty">
+              <div class="icon">💬</div>
+              <span>No messages yet. Say hello!</span>
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <input
+              class="chat-input"
+              id="chatInput"
+              type="text"
+              placeholder="Type a message..."
+              maxlength="500"
+              autocomplete="off"
+            />
+            <button class="chat-send-btn" id="chatSendBtn">➤</button>
+          </div>
+        </div>
       </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+      // ─── State ───
       const socket = io();
       const audio = new Audio();
       let roomId = null;
+      let isHost = false;
       let syncInterval = null;
+      let manualOffset = 0;
+      let pendingState = null;
+      let audioReady = false;
+      let rateResetTimer = null;
+      let vizBars = []; // procedural visualizer state
 
-      const createBtn = document.getElementById("createBtn");
-      const roomSection = document.getElementById("roomSection");
-      const inviteLink = document.getElementById("inviteLink");
-      const playBtn = document.getElementById("playBtn");
-      const pauseBtn = document.getElementById("pauseBtn");
-      const seekSlider = document.getElementById("seekSlider");
-      const status = document.getElementById("status");
+      // ─── DOM Elements ───
+      const $ = (id) => document.getElementById(id);
+      const landingView = $('landingView');
+      const roomView = $('roomView');
+      const audioUrlInput = $('audioUrlInput');
+      const roomIdInput = $('roomIdInput');
+      const createRoomBtn = $('createRoomBtn');
+      const joinRoomBtn = $('joinRoomBtn');
+      const playPauseBtn = $('playPauseBtn');
+      const skipBackBtn = $('skipBackBtn');
+      const skipFwdBtn = $('skipFwdBtn');
+      const volumeBtn = $('volumeBtn');
+      const volumeSlider = $('volumeSlider');
+      const progressBar = $('progressBar');
+      const progressFill = $('progressFill');
+      const currentTimeDisplay = $('currentTimeDisplay');
+      const durationDisplay = $('durationDisplay');
+      const trackName = $('trackName');
+      const trackMeta = $('trackMeta');
+      const trackArt = $('trackArt');
+      const statusPill = $('statusPill');
+      const inviteSection = $('inviteSection');
+      const inviteLinkText = $('inviteLinkText');
+      const copyInviteBtn = $('copyInviteBtn');
+      const listenerBadge = $('listenerBadge');
+      const chatListenerBadge = $('chatListenerBadge');
+      const chatMessages = $('chatMessages');
+      const chatInput = $('chatInput');
+      const chatSendBtn = $('chatSendBtn');
+      const leaveBtn = $('leaveBtn');
+      const offsetControl = $('offsetControl');
+      const offsetSlider = $('offsetSlider');
+      const offsetValue = $('offsetValue');
+      const autoplayOverlay = $('autoplayOverlay');
+      const toastContainer = $('toastContainer');
+      const waveformCanvas = $('waveformCanvas');
 
+      // ─── Toast System ───
+      function showToast(message, type = 'info', duration = 3000) {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+        toast.innerHTML = `<span>${icons[type] || ''}</span> ${message}`;
+        toastContainer.appendChild(toast);
+        setTimeout(() => {
+          toast.classList.add('exit');
+          toast.addEventListener('animationend', () => toast.remove());
+        }, duration);
+      }
+
+      // ─── Utility ───
+      function formatTime(sec) {
+        if (isNaN(sec) || !isFinite(sec)) return '0:00';
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+      }
+
+      function extractTrackName(url) {
+        try {
+          const pathname = new URL(url).pathname;
+          const filename = decodeURIComponent(pathname.split('/').pop());
+          return filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ') || 'Unknown Track';
+        } catch {
+          return 'Audio Stream';
+        }
+      }
+
+      function updateStatusPill(playing) {
+        if (playing) {
+          statusPill.className = 'status-pill playing';
+          statusPill.textContent = '▶ Playing';
+          trackArt.classList.add('playing');
+        } else {
+          statusPill.className = 'status-pill paused';
+          statusPill.textContent = '⏸ Paused';
+          trackArt.classList.remove('playing');
+        }
+      }
+
+      function updatePlayButton(playing) {
+        playPauseBtn.textContent = playing ? '⏸' : '▶';
+      }
+
+      function updateProgress() {
+        if (!isNaN(audio.duration) && audio.duration > 0) {
+          const pct = (audio.currentTime / audio.duration) * 100;
+          progressFill.style.width = pct + '%';
+          currentTimeDisplay.textContent = formatTime(audio.currentTime);
+          durationDisplay.textContent = formatTime(audio.duration);
+        }
+      }
+
+      // ─── Waveform Visualizer (procedural — no Web Audio API so CORS never kills sound) ───
+      function drawWaveform() {
+        const canvas = waveformCanvas;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+
+        canvas.width = canvas.offsetWidth * dpr;
+        canvas.height = canvas.offsetHeight * dpr;
+        ctx.scale(dpr, dpr);
+
+        const W = canvas.offsetWidth;
+        const H = canvas.offsetHeight;
+        const barCount = 64;
+        const barWidth = W / barCount;
+        const gap = 2;
+
+        // Initialize bar targets
+        if (vizBars.length !== barCount) {
+          vizBars = Array.from({ length: barCount }, () => ({ current: 0, target: 0 }));
+        }
+
+        function draw() {
+          requestAnimationFrame(draw);
+          ctx.clearRect(0, 0, W, H);
+
+          const isPlaying = !audio.paused && !audio.ended && audio.readyState > 2;
+
+          if (!isPlaying) {
+            // Idle: gentle sine wave
+            const time = Date.now() / 1000;
+            ctx.beginPath();
+            for (let x = 0; x < W; x++) {
+              const y = H / 2 + Math.sin(x * 0.04 + time * 1.5) * 8 +
+                        Math.sin(x * 0.02 + time * 0.7) * 4;
+              x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Decay bars to zero
+            for (const bar of vizBars) {
+              bar.target = 0;
+              bar.current += (bar.target - bar.current) * 0.1;
+            }
+            return;
+          }
+
+          // Playing: animated frequency-like bars
+          const time = Date.now() / 1000;
+          for (let i = 0; i < barCount; i++) {
+            // Generate organic-looking pseudo-random targets
+            const freq1 = Math.sin(time * (2 + i * 0.15) + i * 0.7) * 0.5 + 0.5;
+            const freq2 = Math.sin(time * (3.5 + i * 0.08) + i * 1.3) * 0.5 + 0.5;
+            const freq3 = Math.sin(time * (1.2 + i * 0.22) + i * 0.4) * 0.5 + 0.5;
+            // Center bars are taller (simulates typical frequency distribution)
+            const centerBoost = 1 - Math.abs(i - barCount / 2) / (barCount / 2) * 0.4;
+            vizBars[i].target = (freq1 * 0.4 + freq2 * 0.35 + freq3 * 0.25) * centerBoost;
+            // Smooth interpolation
+            vizBars[i].current += (vizBars[i].target - vizBars[i].current) * 0.15;
+          }
+
+          for (let i = 0; i < barCount; i++) {
+            const val = vizBars[i].current;
+            const barH = val * H * 0.85 + 2;
+            const x = i * barWidth;
+            const y = (H - barH) / 2;
+
+            const gradient = ctx.createLinearGradient(x, y, x, y + barH);
+            gradient.addColorStop(0, `rgba(139, 92, 246, ${0.5 + val * 0.5})`);
+            gradient.addColorStop(0.5, `rgba(99, 102, 241, ${0.4 + val * 0.5})`);
+            gradient.addColorStop(1, `rgba(59, 130, 246, ${0.3 + val * 0.4})`);
+
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            const r = Math.min((barWidth - gap) / 2, 3);
+            ctx.roundRect(x + gap / 2, y, barWidth - gap, barH, r);
+            ctx.fill();
+          }
+        }
+        draw();
+      }
+
+      // ─── Audio Event Handlers ───
+      audio.addEventListener('timeupdate', updateProgress);
+      audio.addEventListener('loadedmetadata', () => {
+        durationDisplay.textContent = formatTime(audio.duration);
+        trackMeta.textContent = formatTime(audio.duration) + ' · MP3';
+      });
+
+      // ─── Progress Bar Click-to-Seek ───
+      progressBar.addEventListener('click', (e) => {
+        if (!isHost) return;
+        if (isNaN(audio.duration)) return;
+        const rect = progressBar.getBoundingClientRect();
+        const pct = (e.clientX - rect.left) / rect.width;
+        audio.currentTime = pct * audio.duration;
+        sendSync(!audio.paused);
+      });
+
+      // ─── Volume ───
+      volumeSlider.addEventListener('input', () => {
+        audio.volume = volumeSlider.value;
+        volumeBtn.textContent = audio.volume == 0 ? '🔇' : audio.volume < 0.5 ? '🔉' : '🔊';
+      });
+
+      volumeBtn.addEventListener('click', () => {
+        if (audio.volume > 0) {
+          audio.dataset.prevVolume = audio.volume;
+          audio.volume = 0;
+          volumeSlider.value = 0;
+          volumeBtn.textContent = '🔇';
+        } else {
+          audio.volume = audio.dataset.prevVolume || 1;
+          volumeSlider.value = audio.volume;
+          volumeBtn.textContent = '🔊';
+        }
+      });
+
+      // ─── Offset (guest only) ───
+      offsetSlider.addEventListener('input', () => {
+        manualOffset = parseInt(offsetSlider.value);
+        offsetValue.textContent = manualOffset + 'ms';
+      });
+
+      // ─── Host: Send Sync ───
       function sendSync(isPlaying) {
-        socket.emit("playback-update", roomId, {
+        socket.emit('playback-update', roomId, {
           isPlaying,
           currentTime: audio.currentTime,
         });
       }
 
-      createBtn.addEventListener("click", async () => {
-        const url = document.getElementById("audioUrl").value.trim();
-        if (!url) return alert("Enter an MP3 URL.");
+      // ─── Host: Create Room ───
+      createRoomBtn.addEventListener('click', async () => {
+        const url = audioUrlInput.value.trim();
+        if (!url) {
+          showToast('Please enter an audio URL', 'warning');
+          audioUrlInput.focus();
+          return;
+        }
 
-        // FIX Bug 1: server generates roomId — not Math.random() on client
-        const res = await fetch("/create-room-id");
-        const { roomId: id } = await res.json();
-        roomId = id;
+        createRoomBtn.disabled = true;
+        createRoomBtn.textContent = 'Creating...';
 
-        socket.emit("create-room", roomId, url, ({ success, error }) => {
-          if (!success) return alert("Error: " + error);
+        try {
+          const res = await fetch('/create-room-id');
+          const { roomId: id } = await res.json();
+          roomId = id;
+          isHost = true;
 
-          audio.src = url;
-          inviteLink.textContent = `${location.origin}/guest.html?room=${roomId}`;
-          roomSection.style.display = "flex";
-          createBtn.disabled = true;
-          playBtn.disabled = false;
-          pauseBtn.disabled = false;
-          status.textContent = "Room live.";
-        });
-      });
+          socket.emit('create-room', roomId, url, ({ success, error }) => {
+            if (!success) {
+              showToast('Error: ' + error, 'error');
+              createRoomBtn.disabled = false;
+              createRoomBtn.textContent = 'Create Room';
+              return;
+            }
 
-      // FIX Bug 3: wire up UI buttons to audio
-      playBtn.addEventListener("click", () => {
-        audio.play();
-        sendSync(true);
-        clearInterval(syncInterval);
-        syncInterval = setInterval(() => {
-          if (!audio.paused) sendSync(true);
-        }, 250);
-        status.textContent = "Playing…";
-      });
+            audio.src = url;
+            audio.preload = 'auto';
 
-      pauseBtn.addEventListener("click", () => {
-        audio.pause();
-        sendSync(false);
-        clearInterval(syncInterval);
-        status.textContent = "Paused.";
-      });
+            const inviteUrl = `${location.origin}/guest.html?room=${roomId}`;
+            inviteLinkText.textContent = inviteUrl;
+            inviteSection.style.display = 'block';
+            trackName.textContent = extractTrackName(url);
 
-      // Seek slider
-      audio.addEventListener("timeupdate", () => {
-        if (!isNaN(audio.duration)) {
-          seekSlider.value = (audio.currentTime / audio.duration) * 100;
+            showRoomView();
+            showToast('Room created! Share the invite link.', 'success');
+          });
+        } catch (err) {
+          showToast('Failed to create room', 'error');
+          createRoomBtn.disabled = false;
+          createRoomBtn.textContent = 'Create Room';
         }
       });
-      seekSlider.addEventListener("input", () => {
-        if (!isNaN(audio.duration)) {
-          audio.currentTime = (seekSlider.value / 100) * audio.duration;
-          sendSync(!audio.paused);
+
+      // ─── Join Room ───
+      joinRoomBtn.addEventListener('click', () => {
+        let input = roomIdInput.value.trim();
+        if (!input) {
+          showToast('Please enter a room ID or invite link', 'warning');
+          roomIdInput.focus();
+          return;
+        }
+
+        // Parse room ID from invite link or plain ID
+        try {
+          const url = new URL(input);
+          const params = new URLSearchParams(url.search);
+          if (params.get('room')) input = params.get('room');
+        } catch {}
+
+        roomId = input;
+        isHost = false;
+        joinRoom();
+      });
+
+      // ─── Auto-join from URL ───
+      (function checkAutoJoin() {
+        const params = new URLSearchParams(window.location.search);
+        const room = params.get('room');
+        if (room) {
+          roomId = room;
+          isHost = false;
+          joinRoom();
+        }
+      })();
+
+      function joinRoom() {
+        joinRoomBtn.disabled = true;
+        joinRoomBtn.textContent = 'Joining...';
+
+        socket.emit('join-room', roomId, ({ success, error }) => {
+          if (!success) {
+            showToast('Room not found: ' + error, 'error');
+            joinRoomBtn.disabled = false;
+            joinRoomBtn.textContent = 'Join Room';
+            return;
+          }
+
+          offsetControl.style.display = 'flex';
+          playPauseBtn.style.display = 'none';
+          skipBackBtn.style.display = 'none';
+          skipFwdBtn.style.display = 'none';
+
+          showRoomView();
+          showToast('Joined room successfully!', 'success');
+        });
+      }
+
+      // ─── Show Room View ───
+      function showRoomView() {
+        landingView.style.display = 'none';
+        roomView.style.display = 'grid';
+        drawWaveform();
+      }
+
+      // ─── Host: Play/Pause ───
+      playPauseBtn.addEventListener('click', () => {
+        if (!isHost) return;
+
+        if (audio.paused) {
+          audio.play();
+          sendSync(true);
+          clearInterval(syncInterval);
+          syncInterval = setInterval(() => {
+            if (!audio.paused) sendSync(true);
+          }, 250);
+          updateStatusPill(true);
+          updatePlayButton(true);
+        } else {
+          audio.pause();
+          sendSync(false);
+          clearInterval(syncInterval);
+          updateStatusPill(false);
+          updatePlayButton(false);
+        }
+      });
+
+      // ─── Host: Skip ───
+      skipBackBtn.addEventListener('click', () => {
+        if (!isHost) return;
+        audio.currentTime = Math.max(0, audio.currentTime - 10);
+        sendSync(!audio.paused);
+      });
+
+      skipFwdBtn.addEventListener('click', () => {
+        if (!isHost) return;
+        audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 10);
+        sendSync(!audio.paused);
+      });
+
+      // ─── Guest: Audio Loading ───
+      async function loadAudio(url) {
+        if (audio.src === url && audioReady) return;
+        audioReady = false;
+        audio.src = url;
+        audio.preload = 'auto';
+        await new Promise((resolve) => {
+          audio.addEventListener('canplaythrough', resolve, { once: true });
+          audio.load();
+        });
+        audioReady = true;
+      }
+
+      function applySmoothSync(targetTime) {
+        const diff = targetTime - audio.currentTime;
+        if (Math.abs(diff) < 0.05) return;
+
+        if (Math.abs(diff) > 0.5) {
+          audio.currentTime = Math.max(0, targetTime);
+          audio.playbackRate = 1.0;
+          clearTimeout(rateResetTimer);
+        } else {
+          audio.playbackRate = diff > 0 ? 1.02 : 0.98;
+          clearTimeout(rateResetTimer);
+          rateResetTimer = setTimeout(() => {
+            audio.playbackRate = 1.0;
+          }, 2000);
+        }
+      }
+
+      async function applySync(state) {
+        await loadAudio(state.audioUrl);
+        trackName.textContent = extractTrackName(state.audioUrl);
+
+        const networkLatency = (Date.now() - state.serverTimestamp) / 1000;
+        const targetTime = state.currentTime + networkLatency + manualOffset / 1000;
+
+        if (state.isPlaying) {
+          applySmoothSync(targetTime);
+          try {
+            await audio.play();
+            updateStatusPill(true);
+            updatePlayButton(true);
+          } catch {
+            pendingState = state;
+            autoplayOverlay.classList.add('visible');
+          }
+        } else {
+          audio.pause();
+          audio.currentTime = Math.max(0, state.currentTime);
+          audio.playbackRate = 1.0;
+          clearTimeout(rateResetTimer);
+          updateStatusPill(false);
+          updatePlayButton(false);
+        }
+      }
+
+      // ─── Autoplay Overlay ───
+      autoplayOverlay.addEventListener('click', () => {
+        autoplayOverlay.classList.remove('visible');
+        if (pendingState) {
+          applySync(pendingState);
+          pendingState = null;
+        }
+      });
+
+      // ─── Copy Invite Link ───
+      copyInviteBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(inviteLinkText.textContent);
+          copyInviteBtn.textContent = 'Copied!';
+          copyInviteBtn.classList.add('copied');
+          showToast('Invite link copied!', 'success');
+          setTimeout(() => {
+            copyInviteBtn.textContent = 'Copy';
+            copyInviteBtn.classList.remove('copied');
+          }, 2000);
+        } catch {
+          showToast('Failed to copy', 'error');
+        }
+      });
+
+      // ─── Leave Room ───
+      leaveBtn.addEventListener('click', () => {
+        if (isHost) {
+          socket.disconnect();
+          socket.connect();
+        }
+        audio.pause();
+        audio.src = '';
+        clearInterval(syncInterval);
+        roomId = null;
+
+        roomView.style.display = 'none';
+        landingView.style.display = 'flex';
+
+        createRoomBtn.disabled = false;
+        createRoomBtn.textContent = 'Create Room';
+        joinRoomBtn.disabled = false;
+        joinRoomBtn.textContent = 'Join Room';
+
+        // Reset chat
+        chatMessages.innerHTML = '<div class="chat-empty"><div class="icon">💬</div><span>No messages yet. Say hello!</span></div>';
+
+        // Reset URL
+        window.history.replaceState({}, '', '/');
+
+        showToast('Left the room', 'info');
+      });
+
+      // ─── Socket Events ───
+      socket.on('sync-state', (state) => {
+        applySync(state);
+      });
+
+      socket.on('host-disconnected', () => {
+        audio.pause();
+        updateStatusPill(false);
+        updatePlayButton(false);
+        statusPill.className = 'status-pill disconnected';
+        statusPill.textContent = '⚡ Host left';
+        showToast('Host disconnected. Session ended.', 'error');
+      });
+
+      socket.on('room-expired', () => {
+        audio.pause();
+        showToast('Room expired due to inactivity', 'warning');
+      });
+
+      socket.on('user-count', (count) => {
+        listenerBadge.textContent = `👥 ${count}`;
+        chatListenerBadge.textContent = `👥 ${count}`;
+      });
+
+      socket.on('reconnect', () => {
+        if (roomId) {
+          showToast('Reconnecting...', 'info');
+          if (!isHost) {
+            socket.emit('join-room', roomId, ({ success }) => {
+              if (success) showToast('Reconnected!', 'success');
+            });
+          }
+        }
+      });
+
+      // ─── Chat ───
+      function renderChatMessage(msg) {
+        // Remove empty state
+        const empty = chatMessages.querySelector('.chat-empty');
+        if (empty) empty.remove();
+
+        const el = document.createElement('div');
+        el.className = 'chat-msg';
+
+        const time = new Date(msg.timestamp);
+        const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        el.innerHTML = `
+          <div class="chat-msg-header">
+            <span class="chat-msg-sender ${msg.isHost ? 'host' : ''}">${msg.sender}</span>
+            ${msg.isHost ? '<span class="chat-msg-badge">HOST</span>' : ''}
+            <span class="chat-msg-time">${timeStr}</span>
+          </div>
+          <div class="chat-msg-text">${escapeHtml(msg.text)}</div>
+        `;
+        chatMessages.appendChild(el);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function sendChatMessage() {
+        const text = chatInput.value.trim();
+        if (!text || !roomId) return;
+        socket.emit('chat-message', roomId, text);
+        chatInput.value = '';
+      }
+
+      chatSendBtn.addEventListener('click', sendChatMessage);
+      chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') sendChatMessage();
+      });
+
+      socket.on('chat-message', (msg) => {
+        renderChatMessage(msg);
+      });
+
+      socket.on('chat-history', (messages) => {
+        chatMessages.innerHTML = '';
+        if (messages.length === 0) {
+          chatMessages.innerHTML = '<div class="chat-empty"><div class="icon">💬</div><span>No messages yet. Say hello!</span></div>';
+        } else {
+          messages.forEach(renderChatMessage);
         }
       });
     </script>

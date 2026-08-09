@@ -2,173 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>MusicBand – Guest</title>
-    <link rel="stylesheet" href="style.css" />
-    <style>
-      #clickOverlay {
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: #0009;
-        z-index: 100;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        gap: 1rem;
-        font-size: 1.2rem;
-        color: #fff;
-        text-align: center;
-        cursor: pointer;
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MusicBand — Joining Session...</title>
+    <meta name="description" content="Join a MusicBand listening session — listen to music in perfect sync with friends." />
+    <script>
+      // Redirect to main app with room parameter preserved
+      const params = new URLSearchParams(window.location.search);
+      const room = params.get('room');
+      if (room) {
+        window.location.replace('/?room=' + encodeURIComponent(room));
+      } else {
+        window.location.replace('/');
       }
-      #clickOverlay.visible {
-        display: flex;
-      }
-      #clickOverlay span {
-        font-size: 2.5rem;
-      }
-    </style>
+    </script>
   </head>
   <body>
-    <!-- FIX #5: autoplay overlay -->
-    <div id="clickOverlay">
-      <span>🔊</span>
-      <p>⚠️ Click anywhere to enable audio</p>
-    </div>
-
-    <div class="container">
-      <h1>🔊 Joined Session</h1>
-      <div class="status" id="status">Waiting for host...</div>
-      <div class="offset-control">
-        <span class="offset-label"
-          >Manual offset: <b id="offsetValue">0ms</b></span
-        >
-        <input
-          type="range"
-          id="offsetSlider"
-          min="-500"
-          max="500"
-          step="10"
-          value="0"
-        />
-      </div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-      const socket = io();
-      const audio = new Audio();
-      const status = document.getElementById("status");
-      const offsetSlider = document.getElementById("offsetSlider");
-      const offsetValue = document.getElementById("offsetValue");
-      const clickOverlay = document.getElementById("clickOverlay");
-
-      const urlParams = new URLSearchParams(window.location.search);
-      const roomId = urlParams.get("room");
-      let manualOffset = 0;
-      let pendingState = null; // FIX #5: store state if blocked
-      let audioReady = false; // FIX #4: track canplaythrough
-      let rateResetTimer = null; // FIX #3: playback rate smoothing
-
-      offsetSlider.addEventListener("input", (e) => {
-        manualOffset = parseInt(e.target.value);
-        offsetValue.textContent = manualOffset + "ms";
-      });
-
-      // FIX #5: on overlay click, enable audio and apply pending state
-      clickOverlay.addEventListener("click", () => {
-        clickOverlay.classList.remove("visible");
-        if (pendingState) {
-          applySync(pendingState);
-          pendingState = null;
-        }
-      });
-
-      // FIX #4: preload audio, wait for canplaythrough before seeking/playing
-      async function loadAudio(url) {
-        if (audio.src === url && audioReady) return; // already loaded
-        audioReady = false;
-        audio.src = url;
-        audio.preload = "auto";
-        await new Promise((resolve) => {
-          audio.addEventListener("canplaythrough", resolve, { once: true });
-          audio.load();
-        });
-        audioReady = true;
-      }
-
-      // FIX #3: playback rate smoothing for small drift, hard seek for large
-      function applySmoothSync(targetTime) {
-        const diff = targetTime - audio.currentTime; // seconds
-        if (Math.abs(diff) < 0.05) return; // <50ms: fine, do nothing
-
-        if (Math.abs(diff) > 0.5) {
-          // Large drift: hard seek
-          audio.currentTime = Math.max(0, targetTime);
-          audio.playbackRate = 1.0;
-          clearTimeout(rateResetTimer);
-        } else {
-          // Small drift: nudge rate
-          audio.playbackRate = diff > 0 ? 1.02 : 0.98;
-          clearTimeout(rateResetTimer);
-          rateResetTimer = setTimeout(() => {
-            audio.playbackRate = 1.0;
-          }, 2000);
-        }
-      }
-
-      async function applySync(state) {
-        // FIX #4: ensure audio loaded before doing anything
-        await loadAudio(state.audioUrl);
-
-        const networkLatency = (Date.now() - state.serverTimestamp) / 1000;
-        const targetTime =
-          state.currentTime + networkLatency + manualOffset / 1000;
-
-        if (state.isPlaying) {
-          applySmoothSync(targetTime); // FIX #3
-          try {
-            await audio.play();
-            status.textContent = "▶ Playing";
-          } catch (e) {
-            // FIX #5: autoplay blocked — show overlay, save state
-            pendingState = state;
-            clickOverlay.classList.add("visible");
-            status.textContent = "⚠️ Click to enable audio";
-          }
-        } else {
-          audio.pause();
-          audio.currentTime = Math.max(0, state.currentTime);
-          audio.playbackRate = 1.0;
-          clearTimeout(rateResetTimer);
-          status.textContent = "⏸ Paused";
-        }
-      }
-
-      function joinRoom() {
-        socket.emit("join-room", roomId, ({ success, error }) => {
-          if (!success) {
-            status.textContent = "Room not found.";
-            alert("Room not found: " + error);
-          }
-        });
-      }
-
-      joinRoom();
-
-      socket.on("sync-state", (state) => {
-        applySync(state);
-      });
-
-      socket.on("host-disconnected", () => {
-        audio.pause();
-        status.textContent = "Host left. Session ended.";
-      });
-
-      // FIX #8: on reconnect, re-join room so server knows we're back
-      socket.on("reconnect", () => {
-        status.textContent = "Reconnecting...";
-        joinRoom();
-      });
-    </script>
+    <p>Redirecting...</p>
   </body>
 </html>
