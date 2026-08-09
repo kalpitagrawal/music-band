@@ -1,6 +1,8 @@
 # 🎧 MusicBand
 
-> Listen to music in perfect sync with friends — real-time, zero-latency collaborative listening.
+> A real-time collaborative music listening app where a host controls playback while guests stay synchronized through Socket.IO.
+
+Built with Node.js, Express, Socket.IO, the Web Audio API, and vanilla JavaScript.
 
 ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-5.x-000000?style=flat-square&logo=express&logoColor=white)
@@ -48,18 +50,10 @@
 ## 🚀 Quick Start
 
 ```bash
-# Clone the repo
-git clone https://github.com/yourusername/music-band.git
+git clone https://github.com/kalpitagrawal/music-band.git
 cd music-band
-
-# Install dependencies
 npm install
-
-# Start development server (with auto-reload)
 npm run dev
-
-# Or start production server
-npm start
 ```
 
 Then open [http://localhost:3000](http://localhost:3000).
