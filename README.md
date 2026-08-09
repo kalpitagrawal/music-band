@@ -47,6 +47,15 @@ Built with Node.js, Express, Socket.IO, the Web Audio API, and vanilla JavaScrip
 3. **Smooth drift correction** — small drifts (<500ms) nudge playback rate (1.02x/0.98x); large drifts hard-seek
 4. **Manual offset** — guests can fine-tune ±500ms for their setup
 
+## ⚙️ Technical Highlights
+
+- **Real-time synchronization:** Socket.IO events coordinate room creation, joining, playback updates, synchronization state, and chat.
+- **Latency compensation:** Guests use server timestamps to estimate the correct playback position when receiving synchronization events.
+- **Drift correction:** Small timing differences are corrected gradually through playback-rate adjustment, while larger differences trigger a seek.
+- **Host authorization:** Playback control events are restricted to the room host.
+- **Room lifecycle management:** Inactive rooms are automatically removed after 1 hour.
+- **Bounded chat history:** Recent chat messages are shared with newly joined guests while preventing unbounded in-memory growth.
+
 ## 🚀 Quick Start
 
 ```bash
